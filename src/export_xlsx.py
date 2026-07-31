@@ -11,7 +11,7 @@
 строки подсвечены, длинный текст переносится.
 
 Запуск:
-    python src/export_xlsx.py --out data/polza_test_Лукъянчиков.xlsx
+    python src/export_xlsx.py --out data/report.xlsx
 """
 
 from __future__ import annotations
@@ -120,7 +120,7 @@ def add_emails_sheet(wb: Workbook, path: Path) -> None:
     if not path.is_file():
         print(f"  [пропуск] Письма: нет файла {path.name}")
         return
-    ws = wb.create_sheet("Задача 3 — письма")
+    ws = wb.create_sheet("цепочка писем — письма")
     ws.column_dimensions["A"].width = 118
     for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         cell = ws.cell(row=i, column=1, value=line)
@@ -136,7 +136,7 @@ def add_emails_sheet(wb: Workbook, path: Path) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Сборка итогового XLSX")
-    p.add_argument("--out", type=Path, default=DATA / "polza_test.xlsx")
+    p.add_argument("--out", type=Path, default=DATA / "report.xlsx")
     args = p.parse_args()
 
     wb = Workbook()
@@ -144,20 +144,20 @@ def main() -> None:
 
     print("собираю листы:")
     add_sheet(
-        wb, "Задача 1 — база", DATA / "base_50_personalized.csv",
-        "Задача 1 и 2. Компании с открытой вакансией менеджера по продажам — "
+        wb, "сбор базы — база", DATA / "base_50_personalized.csv",
+        "сбор базы и 2. Компании с открытой вакансией менеджера по продажам — "
         "то есть с подтверждённой потребностью в клиентах. "
         "Колонки «Источник» и «Цитата-подтверждение» позволяют проверить любую строку.",
     )
     add_sheet(
-        wb, "Задача 1 — сырьё", DATA / "base_50.csv",
+        wb, "сбор базы — сырьё", DATA / "base_50.csv",
         "Та же база до персонализации: как её отдал сборщик. "
         "Статус почты: valid — синтаксис и MX в порядке; "
         "risky — ролевой или некорпоративный ящик, брать осознанно.",
     )
     add_sheet(
-        wb, "Задача 4 — аудит", DATA / "polza_15_audited.csv",
-        "Задача 4. Аудит присланной базы. Испорчено 6 строк из 15: "
+        wb, "Аудит базы", DATA / "sample_15_audited.csv",
+        "аудит базы. Аудит присланной базы. Испорчено 6 строк из 15: "
         "домены и адреса перепутаны между компаниями. "
         "Колонка «Найденные проблемы» — что именно поймал скрипт.",
     )

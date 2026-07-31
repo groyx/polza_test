@@ -1,16 +1,13 @@
 """
 Единая точка входа к LLM.
 
-Зачем абстракция: у скрипта три возможных бэкенда, и выбор зависит от того,
+Зачем абстракция: у скрипта два возможных бэкенда, и выбор зависит от того,
 что доступно на конкретной машине. Вызывающий код не должен об этом знать.
 
   1. anthropic     — официальный SDK. Нужен ANTHROPIC_API_KEY.
   2. openai_compat — любой OpenAI-совместимый endpoint: OpenRouter, Groq,
                      DeepSeek, GigaChat через прокси, локальная llama.cpp.
                      Нужны LLM_BASE_URL + LLM_API_KEY.
-  3. claude_cli    — подпроцесс `claude -p`. Ключ не нужен, работает на
-                     подписке Claude. Предварительно один раз:  claude setup-token
-
 Выбор по умолчанию (provider="auto") — первый доступный из списка.
 
 Все ответы кэшируются на диск по sha256 от (модель + system + prompt).
@@ -25,8 +22,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,42 +38,6 @@ class LLMResponse:
     text: str
     provider: str
     cached: bool
-
-
-def _find_claude_binary() -> str | None:
-    """
-    Ищет claude.exe / claude.
-
-    Сначала PATH. Если там нет — десктопное приложение Claude держит
-    собственную копию в %APPDATA%\\Claude\\claude-code\\<версия>\\.
-    Берём самую свежую версию.
-    """
-    found = shutil.which("claude")
-    if found:
-        return found
-
-    candidates: list[Path] = []
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        candidates.append(Path(appdata) / "Claude" / "claude-code")
-    home = Path.home()
-    candidates.append(home / ".claude" / "local")
-
-    best: tuple[tuple[int, ...], str] | None = None
-    for root in candidates:
-        if not root.is_dir():
-            continue
-        for child in root.iterdir():
-            for name in ("claude.exe", "claude"):
-                exe = child / name if child.is_dir() else None
-                if exe and exe.is_file():
-                    # сортируем по версии из имени папки: 2.1.217 > 2.1.99
-                    parts = tuple(
-                        int(p) for p in re.findall(r"\d+", child.name)
-                    ) or (0,)
-                    if best is None or parts > best[0]:
-                        best = (parts, str(exe))
-    return best[1] if best else None
 
 
 class LLM:
@@ -104,8 +63,6 @@ class LLM:
             return "anthropic"
         if os.environ.get("LLM_BASE_URL") and os.environ.get("LLM_API_KEY"):
             return "openai_compat"
-        if _find_claude_binary():
-            return "claude_cli"
         # Кэш ответов лежит в репозитории, поэтому даже на машине без
         # ключей и без интернета скрипт способен воспроизвести результат.
         if any(self.cache_dir.glob("*.json")):
@@ -113,10 +70,9 @@ class LLM:
         raise LLMError(
             "Не найден ни один рабочий бэкенд LLM.\n"
             "Сделайте что-то одно:\n"
-            "  1) export ANTHROPIC_API_KEY=sk-ant-...\n"
+            "  1) export ANTHROPIC_API_KEY=...\n"
             "  2) export LLM_BASE_URL=https://openrouter.ai/api/v1 "
             "и LLM_API_KEY=...\n"
-            "  3) установите Claude Code и выполните `claude setup-token`\n"
             "Либо запустите скрипт с --no-llm: факты будут извлечены "
             "детерминированно, без модели."
         )
@@ -125,7 +81,6 @@ class LLM:
         return {
             "anthropic": "claude-sonnet-5",
             "openai_compat": os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
-            "claude_cli": "",  # CLI сам выбирает модель сессии
         }.get(self.provider, "")
 
     # --- кэш -----------------------------------------------------------
@@ -134,8 +89,8 @@ class LLM:
         """
         Ключ считается ТОЛЬКО от system+prompt, без провайдера и модели.
 
-        Так сделано намеренно: иначе запись, сделанная бэкендом claude_cli,
-        не нашлась бы при воспроизведении в режиме replay, и весь смысл
+        Так сделано намеренно: иначе запись, сделанная одним бэкендом, не
+        нашлась бы при воспроизведении в режиме replay, и весь смысл
         закоммиченного кэша пропал бы. Каким бэкендом получен ответ,
         видно внутри самого файла.
         """
@@ -165,7 +120,6 @@ class LLM:
         fn = {
             "anthropic": self._call_anthropic,
             "openai_compat": self._call_openai_compat,
-            "claude_cli": self._call_claude_cli,
         }[self.provider]
         text = fn(prompt, system, max_tokens)
 
@@ -248,39 +202,6 @@ class LLM:
         )
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
-
-    def _call_claude_cli(self, prompt: str, system: str, max_tokens: int) -> str:
-        """
-        Гоняет `claude -p` подпроцессом.
-
-        --allowed-tools "" запрещает агенту лезть в файлы и сеть: нам нужна
-        чистая генерация текста по уже собранному контексту, а не автономная
-        работа. Без этого он начнёт сам ходить в интернет и результат
-        перестанет быть воспроизводимым.
-        """
-        exe = _find_claude_binary()
-        if not exe:
-            raise LLMError("claude не найден")
-
-        full = f"{system}\n\n{prompt}" if system else prompt
-        proc = subprocess.run(
-            [exe, "-p", full, "--output-format", "json", "--allowed-tools", ""],
-            capture_output=True,
-            timeout=self.timeout,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if proc.returncode != 0 and not proc.stdout:
-            raise LLMError(f"claude вернул {proc.returncode}: {proc.stderr[:300]}")
-
-        try:
-            data = json.loads(proc.stdout)
-        except json.JSONDecodeError as e:
-            raise LLMError(f"claude отдал не JSON: {proc.stdout[:300]!r}") from e
-
-        if data.get("is_error"):
-            raise LLMError(f"claude: {data.get('result')}")
-        return data.get("result", "")
 
 
 def _extract_json(text: str) -> dict | None:

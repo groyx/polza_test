@@ -1,0 +1,4 @@
+employer_id,name,hh_url,website,region,signal_vacancy,signal_vacancy_url,open_vacancies
+1000001,ООО Пример Один,https://hh.ru/employer/1000001,https://example-one.test,Москва,Менеджер по продажам,https://hh.ru/vacancy/1,3
+1000002,ООО Пример Два,https://hh.ru/employer/1000002,https://example-two.test,Казань,Менеджер по продажам,https://hh.ru/vacancy/2,1
+1000003,ООО Пример Три,https://hh.ru/employer/1000003,https://example-three.test,Пермь,Руководитель отдела продаж,https://hh.ru/vacancy/3,2

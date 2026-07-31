@@ -1,5 +1,5 @@
 """
-Задача 2 и 4: столбец «Персонализация».
+персонализация и 4: столбец «Персонализация».
 
 На входе список компаний, на выходе тот же список плюс персонализация и
 ссылка на источник. Работает одинаково и для своей собранной базы, и для
@@ -216,7 +216,7 @@ def main() -> None:
                    help="воспроизвести результат из закоммиченного кэша: "
                         "без ключей и без обращения к модели")
     p.add_argument("--provider", default="auto",
-                   help="auto | anthropic | openai_compat | claude_cli | replay")
+                   help="auto | anthropic | openai_compat | replay")
     p.add_argument("--workers", type=int, default=6)
     args = p.parse_args()
 

@@ -21,5 +21,5 @@ rapidfuzz>=3.6
 
 # --- LLM ---
 # Опционально: нужен только для бэкенда `anthropic`.
-# Бэкенды `openai_compat` и `claude_cli` работают без него.
+# Бэкенд `openai_compat` работает без него.
 anthropic>=0.40
